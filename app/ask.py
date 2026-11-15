@@ -25,21 +25,63 @@ def ask(question: str) -> str:
     client = genai.Client(api_key=get_api_key())
     response = client.models.generate_content(model=MODEL, contents=question)
 
-    # TODO(第1回 演習): response.usage_metadata から
-    #   入力トークン数と出力トークン数を表示してみよう（Copilotに頼んでよい）
+    usage = response.usage_metadata
+    input_tokens = usage.prompt_token_count if usage else "不明"
+    output_tokens = usage.candidates_token_count if usage else "不明"
+    print(f"[usage] 入力トークン数: {input_tokens}, 出力トークン数: {output_tokens}")
 
     return response.text
 
+def print_usage(response) -> None:
+    usage = response.usage_metadata
+    input_tokens = usage.prompt_token_count if usage else "不明"
+    output_tokens = usage.candidates_token_count if usage else "不明"
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="素のLLMに質問する")
-    parser.add_argument("question", nargs="?", default=DEFAULT_QUESTION)
-    args = parser.parse_args()
+    print(
+        f"[usage] 入力トークン数: {input_tokens}, "
+        f"出力トークン数: {output_tokens}"
+    )
+
+def chat() -> None:
+    """会話履歴を保持して、繰り返し質問する"""
+    client = genai.Client(api_key=get_api_key())
+    session = client.chats.create(model=MODEL)
 
     print(f"[model] {MODEL}")
-    print(f"[質問] {args.question}\n")
+    print("質問を入力してください。終了するには exit または quit を入力します。")
+
+    while True:
+        question = input("\n質問: ").strip()
+
+        if question.lower() in {"exit", "quit"}:
+            print("終了します。")
+            break
+
+        if not question:
+            print("質問が空です。")
+            continue
+
+        response = session.send_message(question)
+
+        print_usage(response)
+        print(f"\n[回答]\n{response.text}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="LLMに質問する")
+    parser.add_argument("question", nargs="?", help="質問内容を記憶しない")
+    parser.add_argument("--chat", action="store_true", help="会話モードで質問する")
+    args = parser.parse_args()
+
+
     try:
-        print(ask(args.question))
+        if args.chat:
+            chat()
+        else:
+            question = args.question or DEFAULT_QUESTION
+            print(f"[model] {MODEL}")
+            print(f"[質問] {question}\n")
+            print(ask(question))
     except errors.APIError as e:
         print(api_error_message(e.code, e.message))
         raise SystemExit(1)
